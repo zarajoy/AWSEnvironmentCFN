@@ -1,0 +1,7 @@
+EC2
+SG
+ASG
+LB
+CERT
+Listerner
+TG
