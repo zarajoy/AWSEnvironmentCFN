@@ -1,5 +1,30 @@
-Description:  Base VPC Template - 1x VPC, 1x IGW, 12 subnets (3x public subnets, 3x database subnets, 3x application subnets, 3 alternate subnets), route tables and routes.
+Description: Base VPC Template - 1x VPC, 1x IGW, 12 subnets (3x public subnets, 3x database subnets, 3x application subnets, 3 alternate subnets), route tables and routes.
 Parameters:
+  VPCCIDR:
+    Description: VPC CIDR Range
+    Type: String
+    Default: 10.0.0.0/16
+  SubnetCIDR:
+    Description: What should the subnet CIDR be?
+    Type: String
+    Default: '20'
+    AllowedValues:
+      - 32
+      - 31
+      - 30
+      - 29
+      - 28
+      - 27
+      - 26
+      - 25
+      - 24
+      - 23
+      - 22
+      - 21
+      - 20
+      - 19
+      - 18
+      - 17
   Environment:
     Description: What type of Environment is this?
     Type: String
@@ -9,7 +34,25 @@ Parameters:
       - Production
       - QA
     Default: Dev
-    
+Mappings:
+  SubnetMap:
+    CIDR:
+      '17': 15
+      '18': 14
+      '19': 13
+      '20': 12
+      '21': 11
+      '22': 10
+      '23': 9
+      '24': 8
+      '25': 7
+      '26': 6
+      '27': 5
+      '28': 4
+      '29': 3
+      '30': 2
+      '31': 1
+      '32': 0
 Resources:
   VPC:
     Type: AWS::EC2::VPC
@@ -24,9 +67,8 @@ Resources:
           Value: !Ref Environment
         - Key: CreatedBy
           Value: CFN
-          
   InternetGateway:
-    Type: 'AWS::EC2::InternetGateway'
+    Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
         - Key: Name
@@ -35,15 +77,13 @@ Resources:
           Value: !Ref Environment
         - Key: CreatedBy
           Value: CFN
-          
   InternetGatewayAttachment:
-    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Type: AWS::EC2::VPCGatewayAttachment
     Properties:
       VpcId: !Ref VPC
       InternetGatewayId: !Ref InternetGateway
-      
-  RouteTablePublic: 
-    Type: 'AWS::EC2::RouteTable'
+  RouteTablePublic:
+    Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC
       Tags:
@@ -53,44 +93,35 @@ Resources:
           Value: !Ref Environment
         - Key: CreatedBy
           Value: CFN
-          
-  RouteTablePublicRoute: 
-    Type: 'AWS::EC2::Route'
+  RouteTablePublicRoute:
+    Type: AWS::EC2::Route
     DependsOn: InternetGatewayAttachment
     Properties:
-      RouteTableId:
-        Ref: RouteTablePublic
-      DestinationCidrBlock: '0.0.0.0/0'
-      GatewayId:
-        Ref: InternetGateway
-        
+      RouteTableId: !Ref RouteTablePublic
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
   RouteTableAssociationPublicA:
-    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref SubnetPublicA
-      RouteTableId:
-        Ref: RouteTablePublic
-        
+      RouteTableId: !Ref RouteTablePublic
   RouteTableAssociationPublicB:
-    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref SubnetPublicB
-      RouteTableId:
-        Ref: RouteTablePublic
-        
+      RouteTableId: !Ref RouteTablePublic
   RouteTableAssociationPublicC:
-    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref SubnetPublicC
-      RouteTableId:
-        Ref: RouteTablePublic
-        
+      RouteTableId: !Ref RouteTablePublic
+
   SubnetDatabaseA:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
-      CidrBlock: 10.0.16.0/20
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
       Tags:
         - Key: Name
           Value: subnet-database-A
@@ -104,7 +135,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 1, !GetAZs '' ]
-      CidrBlock: 10.0.32.0/20
+      CidrBlock: !Select [ 1, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
       Tags:
         - Key: Name
           Value: subnet-database-B
@@ -118,7 +149,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 2, !GetAZs '' ]
-      CidrBlock: 10.0.48.0/20
+      CidrBlock: !Select [ 2, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
       Tags:
         - Key: Name
           Value: subnet-database-C
@@ -132,7 +163,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
-      CidrBlock: 10.0.64.0/20
+      CidrBlock: !Select [ 3, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
       Tags:
         - Key: Name
           Value: subnet-application-A
@@ -146,7 +177,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 1, !GetAZs '' ]
-      CidrBlock: 10.0.80.0/20
+      CidrBlock: !Select [ 4, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
       Tags:
         - Key: Name
           Value: subnet-application-B
@@ -160,7 +191,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 2, !GetAZs '' ]
-      CidrBlock: 10.0.96.0/20
+      CidrBlock: !Select [ 5, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
       Tags:
         - Key: Name
           Value: subnet-application-C
@@ -175,7 +206,7 @@ Resources:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
       MapPublicIpOnLaunch: true
-      CidrBlock: 10.0.112.0/20
+      CidrBlock: !Select [ 6, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
       Tags:
         - Key: Name
           Value: subnet-public-A
@@ -190,7 +221,7 @@ Resources:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 1, !GetAZs '' ]      
       MapPublicIpOnLaunch: true
-      CidrBlock: 10.0.128.0/20
+      CidrBlock: !Select [ 7, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
       Tags:
         - Key: Name
           Value: subnet-public-B
@@ -205,7 +236,7 @@ Resources:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 2, !GetAZs '' ]
       MapPublicIpOnLaunch: true
-      CidrBlock: 10.0.144.0/20
+      CidrBlock: !Select [ 8, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
       Tags:
         - Key: Name
           Value: subnet-public-C
@@ -219,7 +250,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
-      CidrBlock: 10.0.160.0/20
+      CidrBlock: !Select [ 9, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
       Tags:
         - Key: Name
           Value: subnet-alternate-A
@@ -233,7 +264,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 1, !GetAZs '' ]
-      CidrBlock: 10.0.176.0/20
+      CidrBlock: !Select [ 10, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
       Tags:
         - Key: Name
           Value: subnet-alternate-B
@@ -247,7 +278,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 2, !GetAZs '' ]
-      CidrBlock: 10.0.192.0/20
+      CidrBlock: !Select [ 11, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
       Tags:
         - Key: Name
           Value: subnet-alternate-C
