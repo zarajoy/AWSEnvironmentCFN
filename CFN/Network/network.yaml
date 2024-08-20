@@ -1,9 +1,5 @@
 Description:  Base VPC Template - 1x VPC, 1x IGW, 12 subnets (3x public subnets, 3x database subnets, 3x application subnets, 3 alternate subnets), route tables and routes.
 Parameters:
-  LatestAmiId:
-    Description: AMI for EC2 (default is latest AmaLinux2)
-    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
-    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
   Environment:
     Description: What type of Environment is this?
     Type: String
@@ -58,7 +54,7 @@ Resources:
         - Key: CreatedBy
           Value: CFN
           
-  RouteTablePublic: 
+  RouteTablePublicRoute: 
     Type: 'AWS::EC2::Route'
     DependsOn: InternetGatewayAttachment
     Properties:
@@ -94,7 +90,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
-      CidrBlock: 10.16.0.0/20
+      CidrBlock: 10.0.16.0/20
       Tags:
         - Key: Name
           Value: subnet-database-A
@@ -108,7 +104,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 1, !GetAZs '' ]
-      CidrBlock: 10.16.64.0/20
+      CidrBlock: 10.0.32.0/20
       Tags:
         - Key: Name
           Value: subnet-database-B
@@ -122,7 +118,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 2, !GetAZs '' ]
-      CidrBlock: 10.16.128.0/20
+      CidrBlock: 10.0.48.0/20
       Tags:
         - Key: Name
           Value: subnet-database-C
@@ -136,7 +132,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
-      CidrBlock: 10.16.16.0/20
+      CidrBlock: 10.0.64.0/20
       Tags:
         - Key: Name
           Value: subnet-application-A
@@ -150,7 +146,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 1, !GetAZs '' ]
-      CidrBlock: 10.16.80.0/20
+      CidrBlock: 10.0.80.0/20
       Tags:
         - Key: Name
           Value: subnet-application-B
@@ -164,7 +160,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 2, !GetAZs '' ]
-      CidrBlock: 10.16.144.0/20
+      CidrBlock: 10.0.96.0/20
       Tags:
         - Key: Name
           Value: subnet-application-C
@@ -178,7 +174,8 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
-      CidrBlock: 10.16.32.0/20
+      MapPublicIpOnLaunch: true
+      CidrBlock: 10.0.112.0/20
       Tags:
         - Key: Name
           Value: subnet-public-A
@@ -191,8 +188,9 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 1, !GetAZs '' ]
-      CidrBlock: 10.16.96.0/20
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]      
+      MapPublicIpOnLaunch: true
+      CidrBlock: 10.0.128.0/20
       Tags:
         - Key: Name
           Value: subnet-public-B
@@ -206,7 +204,8 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 2, !GetAZs '' ]
-      CidrBlock: 10.16.160.0/20
+      MapPublicIpOnLaunch: true
+      CidrBlock: 10.0.144.0/20
       Tags:
         - Key: Name
           Value: subnet-public-C
@@ -220,8 +219,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
-      CidrBlock: 10.16.48.0/20
-      MapPublicIpOnLaunch: true
+      CidrBlock: 10.0.160.0/20
       Tags:
         - Key: Name
           Value: subnet-alternate-A
@@ -235,8 +233,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 1, !GetAZs '' ]
-      CidrBlock: 10.16.112.0/20
-      MapPublicIpOnLaunch: true
+      CidrBlock: 10.0.176.0/20
       Tags:
         - Key: Name
           Value: subnet-alternate-B
@@ -250,8 +247,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 2, !GetAZs '' ]
-      CidrBlock: 10.16.176.0/20
-      MapPublicIpOnLaunch: true
+      CidrBlock: 10.0.192.0/20
       Tags:
         - Key: Name
           Value: subnet-alternate-C
