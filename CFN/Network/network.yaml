@@ -1,0 +1,261 @@
+Description:  Base VPC Template - 1x VPC, 1x IGW, 12 subnets (3x public subnets, 3x database subnets, 3x application subnets, 3 alternate subnets), route tables and routes.
+Parameters:
+  LatestAmiId:
+    Description: AMI for EC2 (default is latest AmaLinux2)
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+  Environment:
+    Description: What type of Environment is this?
+    Type: String
+    AllowedValues:
+      - Dev
+      - Test
+      - Production
+      - QA
+    Default: Dev
+    
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: CFN-VPC
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+          
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: CFN-IGW
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+          
+  InternetGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+      
+  RouteTablePublic: 
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: CFN-RT-Public
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+          
+  RouteTablePublic: 
+    Type: 'AWS::EC2::Route'
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId:
+        Ref: RouteTablePublic
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId:
+        Ref: InternetGateway
+        
+  RouteTableAssociationPublicA:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetPublicA
+      RouteTableId:
+        Ref: RouteTablePublic
+        
+  RouteTableAssociationPublicB:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetPublicB
+      RouteTableId:
+        Ref: RouteTablePublic
+        
+  RouteTableAssociationPublicC:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetPublicC
+      RouteTableId:
+        Ref: RouteTablePublic
+        
+  SubnetDatabaseA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.16.0.0/20
+      Tags:
+        - Key: Name
+          Value: subnet-database-A
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+          
+  SubnetDatabaseB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: 10.16.64.0/20
+      Tags:
+        - Key: Name
+          Value: subnet-database-B
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+          
+  SubnetDatabaseC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      CidrBlock: 10.16.128.0/20
+      Tags:
+        - Key: Name
+          Value: subnet-database-C
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+          
+  SubnetApplicationA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.16.16.0/20
+      Tags:
+        - Key: Name
+          Value: subnet-application-A
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+          
+  SubnetApplicationB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: 10.16.80.0/20
+      Tags:
+        - Key: Name
+          Value: subnet-application-B
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+          
+  SubnetApplicationC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      CidrBlock: 10.16.144.0/20
+      Tags:
+        - Key: Name
+          Value: subnet-application-C
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+          
+  SubnetPublicA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.16.32.0/20
+      Tags:
+        - Key: Name
+          Value: subnet-public-A
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+          
+  SubnetPublicB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: 10.16.96.0/20
+      Tags:
+        - Key: Name
+          Value: subnet-public-B
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+          
+  SubnetPublicC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      CidrBlock: 10.16.160.0/20
+      Tags:
+        - Key: Name
+          Value: subnet-public-C
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+          
+  SubnetAlternateA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.16.48.0/20
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: subnet-alternate-A
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+          
+  SubnetAlternateB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: 10.16.112.0/20
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: subnet-alternate-B
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+          
+  SubnetAlternateC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      CidrBlock: 10.16.176.0/20
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: subnet-alternate-C
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
