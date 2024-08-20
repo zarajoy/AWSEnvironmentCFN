@@ -7,24 +7,24 @@ Parameters:
   SubnetCIDR:
     Description: What should the subnet CIDR be?
     Type: String
-    Default: '20'
+    Default: /27
     AllowedValues:
-      - 32
-      - 31
-      - 30
-      - 29
-      - 28
-      - 27
-      - 26
-      - 25
-      - 24
-      - 23
-      - 22
-      - 21
-      - 20
-      - 19
-      - 18
-      - 17
+      - /32
+      - /31
+      - /30
+      - /29
+      - /28
+      - /27
+      - /26
+      - /25
+      - /24
+      - /23
+      - /22
+      - /21
+      - /20
+      - /19
+      - /18
+      - /17
   Environment:
     Description: What type of Environment is this?
     Type: String
@@ -37,22 +37,22 @@ Parameters:
 Mappings:
   SubnetMap:
     CIDR:
-      '17': 15
-      '18': 14
-      '19': 13
-      '20': 12
-      '21': 11
-      '22': 10
-      '23': 9
-      '24': 8
-      '25': 7
-      '26': 6
-      '27': 5
-      '28': 4
-      '29': 3
-      '30': 2
-      '31': 1
-      '32': 0
+      '/17': 15
+      '/18': 14
+      '/19': 13
+      '/20': 12
+      '/21': 11
+      '/22': 10
+      '/23': 9
+      '/24': 8
+      '/25': 7
+      '/26': 6
+      '/27': 5
+      '/28': 4
+      '/29': 3
+      '/30': 2
+      '/31': 1
+      '/32': 0
 Resources:
   VPC:
     Type: AWS::EC2::VPC
