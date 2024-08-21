@@ -1,4 +1,3 @@
-
 Description: Base VPC Template - 1x VPC, 1x IGW, 12 subnets (3x public subnets, 3x
   database subnets, 3x application subnets, 3 alternate subnets), route tables and
   routes.
@@ -19,9 +18,9 @@ Parameters:
   InstanceType:
     Description: WebServer EC2 instance type.
     Type: String
-    Default: t2.micro
+    Default: t3.micro
     AllowedValues:
-      - t1.micro
+      - t3.micro
       - t2.nano
       - t2.micro
       - t2.small
