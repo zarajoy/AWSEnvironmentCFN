@@ -1,30 +1,15 @@
-Description: Base VPC Template - 1x VPC, 1x IGW, 12 subnets (3x public subnets, 3x database subnets, 3x application subnets, 3 alternate subnets), route tables and routes.
+Description: Base VPC Template - 1x VPC, 1x IGW, 12 subnets (3x public subnets, 3x
+  database subnets, 3x application subnets, 3 alternate subnets), route tables and
+  routes.
 Parameters:
+  Project:
+    Description: Give the project a name
+    Type: String
+    Default: ZaraJoy
   VPCCIDR:
     Description: VPC CIDR Range
     Type: String
     Default: 10.0.0.0/16
-  SubnetCIDR:
-    Description: What should the subnet CIDR be?
-    Type: String
-    Default: /27
-    AllowedValues:
-      - /32
-      - /31
-      - /30
-      - /29
-      - /28
-      - /27
-      - /26
-      - /25
-      - /24
-      - /23
-      - /22
-      - /21
-      - /20
-      - /19
-      - /18
-      - /17
   Environment:
     Description: What type of Environment is this?
     Type: String
@@ -34,25 +19,14 @@ Parameters:
       - Production
       - QA
     Default: Dev
-Mappings:
-  SubnetMap:
-    CIDR:
-      '/17': 15
-      '/18': 14
-      '/19': 13
-      '/20': 12
-      '/21': 11
-      '/22': 10
-      '/23': 9
-      '/24': 8
-      '/25': 7
-      '/26': 6
-      '/27': 5
-      '/28': 4
-      '/29': 3
-      '/30': 2
-      '/31': 1
-      '/32': 0
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Tags
+        Parameters:
+          - Project
+          - Environment
 Resources:
   VPC:
     Type: AWS::EC2::VPC
@@ -62,9 +36,13 @@ Resources:
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: CFN-VPC
+          Value: !Join
+            - ':'
+            - - !Ref 'Environment'
+              - !Ref 'Project'
+              - c
         - Key: Environment
-          Value: !Ref Environment
+          Value: !Ref 'Environment'
         - Key: CreatedBy
           Value: CFN
   InternetGateway:
@@ -74,215 +52,340 @@ Resources:
         - Key: Name
           Value: CFN-IGW
         - Key: Environment
-          Value: !Ref Environment
+          Value: !Ref 'Environment'
         - Key: CreatedBy
           Value: CFN
   InternetGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
-      VpcId: !Ref VPC
-      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref 'VPC'
+      InternetGatewayId: !Ref 'InternetGateway'
   RouteTablePublic:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref VPC
+      VpcId: !Ref 'VPC'
       Tags:
         - Key: Name
           Value: CFN-RT-Public
         - Key: Environment
-          Value: !Ref Environment
+          Value: !Ref 'Environment'
         - Key: CreatedBy
           Value: CFN
   RouteTablePublicRoute:
     Type: AWS::EC2::Route
     DependsOn: InternetGatewayAttachment
     Properties:
-      RouteTableId: !Ref RouteTablePublic
-      DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref 'RouteTablePublic'
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref 'InternetGateway'
   RouteTableAssociationPublicA:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref SubnetPublicA
-      RouteTableId: !Ref RouteTablePublic
+      SubnetId: !Ref 'SubnetPublicA'
+      RouteTableId: !Ref 'RouteTablePublic'
   RouteTableAssociationPublicB:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref SubnetPublicB
-      RouteTableId: !Ref RouteTablePublic
+      SubnetId: !Ref 'SubnetPublicB'
+      RouteTableId: !Ref 'RouteTablePublic'
   RouteTableAssociationPublicC:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref SubnetPublicC
-      RouteTableId: !Ref RouteTablePublic
-
+      SubnetId: !Ref 'SubnetPublicC'
+      RouteTableId: !Ref 'RouteTablePublic'
   SubnetDatabaseA:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 0, !GetAZs '' ]
-      CidrBlock: !Select [ 0, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ''
+      CidrBlock: !Select
+        - 0
+        - !Cidr
+          - !GetAtt 'VPC.CidrBlock'
+          - 16
+          - 12
       Tags:
         - Key: Name
           Value: subnet-database-A
         - Key: Environment
-          Value: !Ref Environment
+          Value: !Ref 'Environment'
         - Key: CreatedBy
           Value: CFN
-          
   SubnetDatabaseB:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 1, !GetAZs '' ]
-      CidrBlock: !Select [ 1, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs ''
+      CidrBlock: !Select
+        - 1
+        - !Cidr
+          - !GetAtt 'VPC.CidrBlock'
+          - 16
+          - 12
       Tags:
         - Key: Name
           Value: subnet-database-B
         - Key: Environment
-          Value: !Ref Environment
+          Value: !Ref 'Environment'
         - Key: CreatedBy
           Value: CFN
-          
   SubnetDatabaseC:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 2, !GetAZs '' ]
-      CidrBlock: !Select [ 2, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select
+        - 2
+        - !GetAZs ''
+      CidrBlock: !Select
+        - 2
+        - !Cidr
+          - !GetAtt 'VPC.CidrBlock'
+          - 16
+          - 12
       Tags:
         - Key: Name
           Value: subnet-database-C
         - Key: Environment
-          Value: !Ref Environment
+          Value: !Ref 'Environment'
         - Key: CreatedBy
           Value: CFN
-          
   SubnetApplicationA:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 0, !GetAZs '' ]
-      CidrBlock: !Select [ 3, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ''
+      CidrBlock: !Select
+        - 3
+        - !Cidr
+          - !GetAtt 'VPC.CidrBlock'
+          - 16
+          - 12
       Tags:
         - Key: Name
           Value: subnet-application-A
         - Key: Environment
-          Value: !Ref Environment
+          Value: !Ref 'Environment'
         - Key: CreatedBy
           Value: CFN
-          
   SubnetApplicationB:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 1, !GetAZs '' ]
-      CidrBlock: !Select [ 4, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs ''
+      CidrBlock: !Select
+        - 4
+        - !Cidr
+          - !GetAtt 'VPC.CidrBlock'
+          - 16
+          - 12
       Tags:
         - Key: Name
           Value: subnet-application-B
         - Key: Environment
-          Value: !Ref Environment
+          Value: !Ref 'Environment'
         - Key: CreatedBy
           Value: CFN
-          
   SubnetApplicationC:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 2, !GetAZs '' ]
-      CidrBlock: !Select [ 5, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select
+        - 2
+        - !GetAZs ''
+      CidrBlock: !Select
+        - 5
+        - !Cidr
+          - !GetAtt 'VPC.CidrBlock'
+          - 16
+          - 12
       Tags:
         - Key: Name
           Value: subnet-application-C
         - Key: Environment
-          Value: !Ref Environment
+          Value: !Ref 'Environment'
         - Key: CreatedBy
           Value: CFN
-          
   SubnetPublicA:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ''
       MapPublicIpOnLaunch: true
-      CidrBlock: !Select [ 6, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
+      CidrBlock: !Select
+        - 6
+        - !Cidr
+          - !GetAtt 'VPC.CidrBlock'
+          - 16
+          - 12
       Tags:
         - Key: Name
           Value: subnet-public-A
         - Key: Environment
-          Value: !Ref Environment
+          Value: !Ref 'Environment'
         - Key: CreatedBy
           Value: CFN
-          
   SubnetPublicB:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 1, !GetAZs '' ]      
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs ''
       MapPublicIpOnLaunch: true
-      CidrBlock: !Select [ 7, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
+      CidrBlock: !Select
+        - 7
+        - !Cidr
+          - !GetAtt 'VPC.CidrBlock'
+          - 16
+          - 12
       Tags:
         - Key: Name
           Value: subnet-public-B
         - Key: Environment
-          Value: !Ref Environment
+          Value: !Ref 'Environment'
         - Key: CreatedBy
           Value: CFN
-          
   SubnetPublicC:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select
+        - 2
+        - !GetAZs ''
       MapPublicIpOnLaunch: true
-      CidrBlock: !Select [ 8, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
+      CidrBlock: !Select
+        - 8
+        - !Cidr
+          - !GetAtt 'VPC.CidrBlock'
+          - 16
+          - 12
       Tags:
         - Key: Name
           Value: subnet-public-C
         - Key: Environment
-          Value: !Ref Environment
+          Value: !Ref 'Environment'
         - Key: CreatedBy
           Value: CFN
-          
   SubnetAlternateA:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 0, !GetAZs '' ]
-      CidrBlock: !Select [ 9, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ''
+      CidrBlock: !Select
+        - 9
+        - !Cidr
+          - !GetAtt 'VPC.CidrBlock'
+          - 16
+          - 12
       Tags:
         - Key: Name
           Value: subnet-alternate-A
         - Key: Environment
-          Value: !Ref Environment
+          Value: !Ref 'Environment'
         - Key: CreatedBy
           Value: CFN
-          
   SubnetAlternateB:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 1, !GetAZs '' ]
-      CidrBlock: !Select [ 10, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs ''
+      CidrBlock: !Select
+        - 10
+        - !Cidr
+          - !GetAtt 'VPC.CidrBlock'
+          - 16
+          - 12
       Tags:
         - Key: Name
           Value: subnet-alternate-B
         - Key: Environment
-          Value: !Ref Environment
+          Value: !Ref 'Environment'
         - Key: CreatedBy
           Value: CFN
-          
   SubnetAlternateC:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 2, !GetAZs '' ]
-      CidrBlock: !Select [ 11, !Cidr [ !GetAtt VPC.CidrBlock, 16, Fn::FindInMap: [ SubnetMap, CIDR, !Ref SubnetCIDR ] ]]
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select
+        - 2
+        - !GetAZs ''
+      CidrBlock: !Select
+        - 11
+        - !Cidr
+          - !GetAtt 'VPC.CidrBlock'
+          - 16
+          - 12
       Tags:
         - Key: Name
           Value: subnet-alternate-C
         - Key: Environment
-          Value: !Ref Environment
+          Value: !Ref 'Environment'
         - Key: CreatedBy
           Value: CFN
+Outputs:
+  vpc:
+    Value: !Ref 'VPC'
+    Export:
+      Name: a4l-vpc1
+  subnetpublica:
+    Value: !Ref 'SubnetPublicA'
+    Export:
+      Name: subnet-public-A
+  subnetpublicb:
+    Value: !Ref 'SubnetPublicB'
+    Export: 
+        Name: subnet-public-B
+  subnetpublicc:
+    Value: !Ref 'SubnetPublicC'
+    Export:
+      Name: subnet-public-C
+  subnetappa:
+    Value: !Ref 'SubnetApplicationA'
+    Export:
+      Name: subnet-application-A
+  subnetappb:
+    Value: !Ref 'SubnetApplicationB'
+    Export:
+      Name: subnet-application-B
+  subnetappc:
+    Value: !Ref 'SubnetApplicationC'
+    Export:
+      Name: subnet-application-C
+  subnetdba:
+    Value: !Ref 'SubnetDatabaseA'
+    Export:
+      Name: subnet-database-A
+  subnetdbb:
+    Value: !Ref 'SubnetDatabaseB'
+    Export:
+      Name: subnet-database-B
+  subnetdbc:
+    Value: !Ref 'SubnetDatabaseC'
+    Export:
+      Name: subnet-database-C
+  subnetreserveda:
+    Value: !Ref 'SubnetAlternateA'
+    Export:
+      Name: subnet-alternate-A
+  subnetreservedb:
+    Value: !Ref 'SubnetAlternateB'
+    Export:
+      Name: subnet-alternate-B
+  subnetreservedc:
+    Value: !Ref 'SubnetAlternateC'
+    Export:
+      Name: subnet-alternate-C
