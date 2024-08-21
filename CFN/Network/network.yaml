@@ -38,7 +38,7 @@ Resources:
         - Key: Name
           Value: !Join
             - ':'
-              - !Ref 'Project'
+            - - !Ref 'Project'
               - VPC
         - Key: Environment
           Value: !Ref 'Environment'
@@ -49,7 +49,10 @@ Resources:
     Properties:
       Tags:
         - Key: Name
-          Value: CFN-IGW
+          Value: !Join
+            - ':'
+            - - !Ref 'Project'
+              - IGW
         - Key: Environment
           Value: !Ref 'Environment'
         - Key: CreatedBy
@@ -65,7 +68,10 @@ Resources:
       VpcId: !Ref 'VPC'
       Tags:
         - Key: Name
-          Value: CFN-RT-Public
+          Value: !Join
+            - ':'
+            - - !Ref 'Project'
+              - RouteTablePublic
         - Key: Environment
           Value: !Ref 'Environment'
         - Key: CreatedBy
@@ -107,7 +113,10 @@ Resources:
           - 12
       Tags:
         - Key: Name
-          Value: subnet-database-A
+          Value: !Join
+            - ':'
+            - - !Ref 'Project'
+              - subnet-database-A
         - Key: Environment
           Value: !Ref 'Environment'
         - Key: CreatedBy
@@ -127,7 +136,10 @@ Resources:
           - 12
       Tags:
         - Key: Name
-          Value: subnet-database-B
+          Value: !Join
+            - ':'
+            - - !Ref 'Project'
+              - subnet-database-B
         - Key: Environment
           Value: !Ref 'Environment'
         - Key: CreatedBy
@@ -147,7 +159,10 @@ Resources:
           - 12
       Tags:
         - Key: Name
-          Value: subnet-database-C
+          Value: !Join
+            - ':'
+            - - !Ref 'Project'
+              - subnet-database-C
         - Key: Environment
           Value: !Ref 'Environment'
         - Key: CreatedBy
@@ -167,7 +182,10 @@ Resources:
           - 12
       Tags:
         - Key: Name
-          Value: subnet-application-A
+          Value: !Join
+            - ':'
+            - - !Ref 'Project'
+              - subnet-application-A
         - Key: Environment
           Value: !Ref 'Environment'
         - Key: CreatedBy
@@ -187,7 +205,10 @@ Resources:
           - 12
       Tags:
         - Key: Name
-          Value: subnet-application-B
+          Value: !Join
+            - ':'
+            - - !Ref 'Project'
+              - subnet-application-A
         - Key: Environment
           Value: !Ref 'Environment'
         - Key: CreatedBy
@@ -207,7 +228,10 @@ Resources:
           - 12
       Tags:
         - Key: Name
-          Value: subnet-application-C
+          Value: !Join
+            - ':'
+            - - !Ref 'Project'
+              - subnet-application-A
         - Key: Environment
           Value: !Ref 'Environment'
         - Key: CreatedBy
@@ -228,7 +252,10 @@ Resources:
           - 12
       Tags:
         - Key: Name
-          Value: subnet-public-A
+          Value: !Join
+            - ':'
+            - - !Ref 'Project'
+              - subnet-public-A
         - Key: Environment
           Value: !Ref 'Environment'
         - Key: CreatedBy
@@ -249,7 +276,10 @@ Resources:
           - 12
       Tags:
         - Key: Name
-          Value: subnet-public-B
+          Value: !Join
+            - ':'
+            - - !Ref 'Project'
+              - subnet-public-B
         - Key: Environment
           Value: !Ref 'Environment'
         - Key: CreatedBy
@@ -270,7 +300,10 @@ Resources:
           - 12
       Tags:
         - Key: Name
-          Value: subnet-public-C
+          Value: !Join
+            - ':'
+            - - !Ref 'Project'
+              - subnet-public-C
         - Key: Environment
           Value: !Ref 'Environment'
         - Key: CreatedBy
@@ -290,7 +323,10 @@ Resources:
           - 12
       Tags:
         - Key: Name
-          Value: subnet-alternate-A
+          Value: !Join
+            - ':'
+            - - !Ref 'Project'
+              - subnet-alternate-A
         - Key: Environment
           Value: !Ref 'Environment'
         - Key: CreatedBy
@@ -310,7 +346,10 @@ Resources:
           - 12
       Tags:
         - Key: Name
-          Value: subnet-alternate-B
+          Value: !Join
+            - ':'
+            - - !Ref 'Project'
+              - subnet-alternate-B
         - Key: Environment
           Value: !Ref 'Environment'
         - Key: CreatedBy
@@ -330,7 +369,10 @@ Resources:
           - 12
       Tags:
         - Key: Name
-          Value: subnet-alternate-C
+          Value: !Join
+            - ':'
+            - - !Ref 'Project'
+              - subnet-alternate-C
         - Key: Environment
           Value: !Ref 'Environment'
         - Key: CreatedBy
@@ -339,7 +381,7 @@ Outputs:
   vpc:
     Value: !Ref 'VPC'
     Export:
-      Name: a4l-vpc1
+      Name: vpc
   subnetpublica:
     Value: !Ref 'SubnetPublicA'
     Export:
