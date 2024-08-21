@@ -38,9 +38,8 @@ Resources:
         - Key: Name
           Value: !Join
             - ':'
-            - - !Ref 'Environment'
               - !Ref 'Project'
-              - c
+              - VPC
         - Key: Environment
           Value: !Ref 'Environment'
         - Key: CreatedBy
