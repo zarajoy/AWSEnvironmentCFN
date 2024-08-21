@@ -1,0 +1,96 @@
+Description: S3 bucket with no public access + lambda function to make Project Parameter lowercase for bucket name
+Parameters:
+  Project:
+    Description: Give the project a name
+    Type: String
+    Default: ZaraJoy
+  VPCCIDR:
+    Description: VPC CIDR Range
+    Type: String
+    Default: 10.0.0.0/16
+  Environment:
+    Description: What type of Environment is this?
+    Type: String
+    AllowedValues:
+      - Dev
+      - Test
+      - Production
+      - QA
+    Default: Dev
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Tags
+        Parameters:
+          - Project
+          - Environment
+Resources:
+  LowerCaseLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Returns the lowercase version of a string
+      MemorySize: 256
+      Runtime: python3.8
+      Handler: index.lambda_handler
+      Role: !GetAtt 'LowerCaseLambdaRole.Arn'
+      Timeout: 30
+      Code:
+        ZipFile: "import cfnresponse\n\ndef lambda_handler(event, context):      \
+          \                                              \n    output = event['ResourceProperties'].get('InputString',\
+          \ '').lower()                \n    responseData = {'OutputString': output}\
+          \                                            \n    cfnresponse.send(event,\
+          \ context, cfnresponse.SUCCESS, responseData)                \n"
+  LowerCaseLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: lambda-write-logs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*
+  S3BucketName:
+    Type: Custom::Lowercase
+    Properties:
+      ServiceToken: !GetAtt 'LowerCaseLambda.Arn'
+      InputString: !Ref 'Project'
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join
+        - '-'
+        - - !GetAtt 'S3BucketName.OutputString'
+          - s3
+          - !Select
+            - 0
+            - !Split
+              - '-'
+              - !Select
+                - 2
+                - !Split
+                  - /
+                  - !Ref 'AWS::StackId'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+Outputs:
+  BucketName:
+    Value: !Ref 'S3Bucket'
+    Description: Name of the Amazon S3 bucket

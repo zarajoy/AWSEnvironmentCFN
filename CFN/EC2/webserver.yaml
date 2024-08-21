@@ -1,0 +1,125 @@
+Description: Creates a simple apache webserver. Copies index.html from s3 bucket to load as webpage.
+Parameters:
+  Project:
+    Description: Give the project a name
+    Type: String
+    Default: ZaraJoy
+  Environment:
+    Description: What type of Environment is this?
+    Type: String
+    AllowedValues:
+      - Dev
+      - Test
+      - Production
+      - QA
+    Default: Dev
+  InstanceType:
+    Description: WebServer EC2 instance type.
+    Type: String
+    Default: t3.micro
+  BucketName:
+    Description: BucketName
+    Type: String
+    Default: zarajoy-s3-4fd4f850
+  ObjectPrefix:
+    Description: location of index.html in bucket. if at root just /
+    Type: String
+    Default: /
+  SubnetId:
+    Description: Subnet ID which will run the web server instance
+    Type: AWS::EC2::Subnet::Id
+  LatestAmiId:
+    Description: AMI for EC2
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+  SSHLocation:
+    Description: The IP address range that can be used to SSH to the EC2 instance.
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: '0.0.0.0/0'
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: Must be a valid IP CIDR range of the form x.x.x.x/x
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Tags
+        Parameters:
+          - Project
+          - Environment
+Resources:
+  KeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: KeyPair
+  WebServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP access via port 80 and SSH Access port 22.
+      VpcId: vpc-082497b4f260197b3
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: '0.0.0.0/0'
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: !Ref 'SSHLocation'
+  EC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref 'InstanceType'
+      ImageId: !Ref 'LatestAmiId'
+      SubnetId: !Ref 'SubnetId'
+      KeyName: !Ref 'KeyPair'
+      SecurityGroupIds: 
+        - !Ref 'WebServerSecurityGroup'
+      IamInstanceProfile: !Ref 'IAMInstanceProfile'
+      UserData: !Base64
+        Fn::Sub: "#!/bin/bash -xe\nyum update -y aws-cfn-bootstrap\nyum install -y\
+          \ httpd\nsystemctl start httpd\nsystemctl enable httpd\naws s3 cp s3://${BucketName}${ObjectPrefix}index.html\
+          \ /var/www/html/\n"
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref 'Project'
+              - EC2
+        - Key: Environment
+          Value: !Ref 'Environment'
+  IAMInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref 'IAMRole'
+      InstanceProfileName: ec2-access-s3
+  IAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ec2-s3-access
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: EC2Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub 'arn:aws:s3:::${BucketName}/index.html'
+Outputs:
+  WebsiteURL:
+    Description: URL for webserver created.
+    Value: !Join
+      - ''
+      - - http://
+        - !GetAtt 'EC2.PublicDnsName'
