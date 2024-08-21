@@ -402,60 +402,60 @@ Outputs:
   vpc:
     Value: !Ref 'VPC'
     Export:
-      Name: vpc
+      Name: !Sub "${AWS::StackName}-vpc
   subnetpublica:
     Value: !Ref 'SubnetPublicA'
     Export:
-      Name: subnet-public-A
+      Name: !Sub "${AWS::StackName}-subnet-public-A"
   subnetpublicb:
     Condition: 2AZ
     Value: !Ref 'SubnetPublicB'
     Export: 
-        Name: subnet-public-B
+        Name: !Sub "${AWS::StackName}-subnet-public-B
   subnetpublicc:
     Condition: 3AZ
     Value: !Ref 'SubnetPublicC'
     Export:
-      Name: subnet-public-C
+      Name: !Sub "${AWS::StackName}-subnet-public-C
   subnetappa:
     Value: !Ref 'SubnetApplicationA'
     Export:
-      Name: subnet-application-A
+      Name: !Sub "${AWS::StackName}-subnet-application-A
   subnetappb:
     Condition: 2AZ
     Value: !Ref 'SubnetApplicationB'
     Export:
-      Name: subnet-application-B
+      Name: !Sub "${AWS::StackName}-subnet-application-B
   subnetappc:
     Condition: 3AZ
     Value: !Ref 'SubnetApplicationC'
     Export:
-      Name: subnet-application-C
+      Name: !Sub "${AWS::StackName}-subnet-application-C
   subnetdba:
     Value: !Ref 'SubnetDatabaseA'
     Export:
-      Name: subnet-database-A
+      Name: !Sub "${AWS::StackName}-subnet-database-A
   subnetdbb:
     Condition: 2AZ
     Value: !Ref 'SubnetDatabaseB'
     Export:
-      Name: subnet-database-B
+      Name: !Sub "${AWS::StackName}-subnet-database-B
   subnetdbc:
     Condition: 3AZ
     Value: !Ref 'SubnetDatabaseC'
     Export:
-      Name: subnet-database-C
+      Name: !Sub "${AWS::StackName}-subnet-database-C
   subnetreserveda:
     Value: !Ref 'SubnetAlternateA'
     Export:
-      Name: subnet-alternate-A
+      Name: !Sub "${AWS::StackName}-subnet-alternate-A
   subnetreservedb:
     Condition: 2AZ
     Value: !Ref 'SubnetAlternateB'
     Export:
-      Name: subnet-alternate-B
+      Name: !Sub "${AWS::StackName}-subnet-alternate-B
   subnetreservedc:
     Condition: 3AZ
     Value: !Ref 'SubnetAlternateC'
     Export:
-      Name: subnet-alternate-C
+      Name: !Sub "${AWS::StackName}-subnet-alternate-C
