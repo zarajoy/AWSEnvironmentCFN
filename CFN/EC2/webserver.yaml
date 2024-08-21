@@ -1,6 +1,4 @@
-Description: Base VPC Template - 1x VPC, 1x IGW, 12 subnets (3x public subnets, 3x
-  database subnets, 3x application subnets, 3 alternate subnets), route tables and
-  routes.
+Description: Creates a simple apache webserver. Copies index.html from s3 bucket to load as webpage.
 Parameters:
   Project:
     Description: Give the project a name
@@ -24,9 +22,9 @@ Parameters:
     Type: String
     Default: zarajoy-s3-4fd4f850
   ObjectPrefix:
-    Description: index.html prefix,for ex /
+    Description: location of index.html in bucket. if at root just /
     Type: String
-    Default: index.html
+    Default: /
   SubnetId:
     Description: Subnet ID which will run the web server instance
     Type: AWS::EC2::Subnet::Id
@@ -120,7 +118,7 @@ Resources:
                 Resource: !Sub 'arn:aws:s3:::${BucketName}/index.html'
 Outputs:
   WebsiteURL:
-    Description: URL for newly apache webserver created.
+    Description: URL for webserver created.
     Value: !Join
       - ''
       - - http://
