@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: EC2 Running Wordpress on Nginx, RDS db, ALB and Certs
+Description: EC2 Running Wordpress on linux, RDS db, ALB and Certs
 Parameters:
   Project:
     Description: Give the project a name
@@ -39,6 +39,16 @@ Parameters:
   DbUser:
     Type: String
     Default: DbUser
+  DbPassword:
+    Type: String
+    NoEcho: 'true'
+    MinLength: '8'
+    AllowedPattern: '[a-zA-Z0-9!?]*'
+    ConstraintDescription: Must only contain upper and lowercase letters, numbers
+      and contain a minimum of 8 characters
+  DBNAME:
+    Type: String
+    Default: WPDB
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -112,19 +122,6 @@ Resources:
           FromPort: '3306'
           ToPort: '3306'
           SourceSecurityGroupId: !Ref 'EC2SecurityGroup'
-  RDSSecret:
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Name: RDSSecret
-      Description: This secret has a dynamically generated secret password.
-      GenerateSecretString:
-        SecretStringTemplate: !Sub '{"username": "${DbUser}"}'
-        GenerateStringKey: password
-        PasswordLength: 30
-        ExcludeCharacters: '"@/\'
-      Tags:
-        - Key: AppName
-          Value: AppA
   RDSSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
@@ -138,11 +135,11 @@ Resources:
     Properties:
       AllocatedStorage: '20'
       DBInstanceClass: db.t3.micro
-      DBName: dbname
+      DBName: !Ref DBNAME
       Engine: MySQL
       EngineVersion: 8.0.32
-      MasterUserPassword: !Sub '{{resolve:secretsmanager:${RDSSecret}::password}}'
-      MasterUsername: !Sub '{{resolve:secretsmanager:${RDSSecret}::username}}'
+      MasterUserPassword: !Ref DbPassword
+      MasterUsername: !Ref DbUser
       StorageType: gp2
       DBSubnetGroupName: !Ref 'RDSSubnetGroup'
       VPCSecurityGroups:
@@ -155,6 +152,7 @@ Resources:
               - RDS
         - Key: Environment
           Value: !Ref 'Environment'
+
   WordpressRole:
     Type: AWS::IAM::Role
     Properties:
@@ -205,15 +203,171 @@ Resources:
               - EC2
         - Key: Environment
           Value: !Ref 'Environment'
-      UserData: !Base64
-        Fn::Sub: "#!/bin/bash -xe\nyum update -y\nyum install -y aws-cfn-bootstrap\
-          \ cloud-init aws-cli\n/opt/aws/bin/cfn-init -v --stack ${AWS::StackName}\
-          \ --resource EC2Instance --region ${AWS::Region} --configsets ec2_setup\n\
-          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2Instance\
-          \ --region ${AWS::Region}\n"
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+
+          # Install system software - including Web and DB (because we need the CLI tools)
+          dnf install wget php-mysqlnd httpd php-fpm php-mysqli mariadb105-server php-json php php-devel -y
+          # Start httpd and set to start on system startup
+          systemctl enable httpd
+          systemctl start httpd
+          # Install Wordpress
+          wget http://wordpress.org/latest.tar.gz -P /var/www/html
+          cd /var/www/html
+          tar -zxvf latest.tar.gz
+          cp -rvf wordpress/* .
+          rm -R wordpress
+          rm latest.tar.gz
+          # Configure Wordpress
+          cp ./wp-config-sample.php ./wp-config.php
+          sed -i "s/'database_name_here'/'${DBNAME}'/g" wp-config.php
+          sed -i "s/'username_here'/'${DbUser}'/g" wp-config.php
+          sed -i "s/'password_here'/'${DbPassword}'/g" wp-config.php
+          sed -i "s/'localhost'/'${RDS.Endpoint.Address}'/g" wp-config.php
+          #permissions   
+          usermod -a -G apache ec2-user   
+          chown -R ec2-user:apache /var/www
+          chmod 2775 /var/www
+          find /var/www -type d -exec chmod 2775 {} \;
+          find /var/www -type f -exec chmod 0664 {} \;
+          #CWAgent Install & Config
+          dnf install amazon-cloudwatch-agent -y
+          mkdir -p /usr/share/collectd/
+          touch /usr/share/collectd/types.db
+          /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${CWAgentConfig} -s
+          #SIGNAL FINISH OF INSTALL & CONFIG
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackId} --resource WordpressEC2 --region ${AWS::Region}
+          #  WORDPRESS IP FIX (Adding this after the signal because if we DON'T have a populated DB, it errors)
+          cat >> /home/ec2-user/update_wp_ip.sh<< 'EOF'
+          #!/bin/bash
+          source <(php -r 'require("/var/www/html/wp-config.php"); echo("DB_NAME=".DB_NAME."; DB_USER=".DB_USER."; DB_PASSWORD=".DB_PASSWORD."; DB_HOST=".DB_HOST); ')
+          SQL_COMMAND="mysql -u $DB_USER -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e"
+          OLD_URL=$(mysql -u $DB_USER -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e 'select option_value from wp_options where option_id = 1;' | grep http)
+          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+          HOST=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
+          $SQL_COMMAND "UPDATE wp_options SET option_value = replace(option_value, '$OLD_URL', 'http://$HOST') WHERE option_name = 'home' OR option_name = 'siteurl';"
+          $SQL_COMMAND "UPDATE wp_posts SET guid = replace(guid, '$OLD_URL','http://$HOST');"
+          $SQL_COMMAND "UPDATE wp_posts SET post_content = replace(post_content, '$OLD_URL', 'http://$HOST');"
+          $SQL_COMMAND "UPDATE wp_postmeta SET meta_value = replace(meta_value,'$OLD_URL','http://$HOST');"
+          EOF
+
+          chmod 755 /home/ec2-user/update_wp_ip.sh
+          echo "/home/ec2-user/update_wp_ip.sh" >> /etc/rc.local
+          /home/ec2-user/update_wp_ip.sh
+  CWAgentConfig:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: 'String'
+      Value: |
+        {
+          "agent": {
+            "metrics_collection_interval": 60,
+            "run_as_user": "root"
+          },
+          "logs": {
+            "logs_collected": {
+              "files": {
+                "collect_list": [
+                  {
+                    "file_path": "/var/log/secure",
+                    "log_group_name": "/var/log/secure",
+                    "log_stream_name": "{instance_id}"
+                  },
+                  {
+                    "file_path": "/var/log/httpd/access_log",
+                    "log_group_name": "/var/log/httpd/access_log",
+                    "log_stream_name": "{instance_id}"
+                  },
+                  {
+                    "file_path": "/var/log/httpd/error_log",
+                    "log_group_name": "/var/log/httpd/error_log",
+                    "log_stream_name": "{instance_id}"
+                  }
+                ]
+              }
+            }
+          },
+          "metrics": {
+            "append_dimensions": {
+              "AutoScalingGroupName": "${aws:AutoScalingGroupName}",
+              "ImageId": "${aws:ImageId}",
+              "InstanceId": "${aws:InstanceId}",
+              "InstanceType": "${aws:InstanceType}"
+            },
+            "metrics_collected": {
+              "collectd": {
+                "metrics_aggregation_interval": 60
+              },
+              "cpu": {
+                "measurement": [
+                  "cpu_usage_idle",
+                  "cpu_usage_iowait",
+                  "cpu_usage_user",
+                  "cpu_usage_system"
+                ],
+                "metrics_collection_interval": 60,
+                "resources": [
+                  "*"
+                ],
+                "totalcpu": false
+              },
+              "disk": {
+                "measurement": [
+                  "used_percent",
+                  "inodes_free"
+                ],
+                "metrics_collection_interval": 60,
+                "resources": [
+                  "*"
+                ]
+              },
+              "diskio": {
+                "measurement": [
+                  "io_time",
+                  "write_bytes",
+                  "read_bytes",
+                  "writes",
+                  "reads"
+                ],
+                "metrics_collection_interval": 60,
+                "resources": [
+                  "*"
+                ]
+              },
+              "mem": {
+                "measurement": [
+                  "mem_used_percent"
+                ],
+                "metrics_collection_interval": 60
+              },
+              "netstat": {
+                "measurement": [
+                  "tcp_established",
+                  "tcp_time_wait"
+                ],
+                "metrics_collection_interval": 60
+              },
+              "statsd": {
+                "metrics_aggregation_interval": 60,
+                "metrics_collection_interval": 10,
+                "service_address": ":8125"
+              },
+              "swap": {
+                "measurement": [
+                  "swap_used_percent"
+                ],
+                "metrics_collection_interval": 60
+              }
+            }
+          }
+        }          
 Outputs:
-  InstanceURL:
+  WordPressIP:
     Value: !Join
       - ''
       - - http://
-        - !GetAtt 'EC2Instance.PrivateDnsName'
+        - !GetAtt 'EC2Instance.PublicIp'
+  dbhost:
+    Description: "RDS Endpoint Address"
+    Value: !GetAtt RDS.Endpoint.Address
