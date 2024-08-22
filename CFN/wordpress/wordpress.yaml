@@ -8,7 +8,6 @@ Parameters:
   VpcID:
     Description: VPC Id
     Type: AWS::EC2::VPC::Id
-    Default: null
   Environment:
     Description: What type of Environment is this?
     Type: String
@@ -20,7 +19,9 @@ Parameters:
     Default: Dev
   AppSubnetId:
     Type: AWS::EC2::Subnet::Id
-  DBSubnetId:
+  DBSubnetId1:
+    Type: AWS::EC2::Subnet::Id
+  DBSubnetId2:
     Type: AWS::EC2::Subnet::Id
   EfsMountPoint:
     Type: String
@@ -35,10 +36,6 @@ Parameters:
     Description: AMI for EC2
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
-  DbHost:
-    Type: String
-  DbName:
-    Type: String
   DbUser:
     Type: String
     Default: DbUser
@@ -133,20 +130,21 @@ Resources:
     Properties:
       DBSubnetGroupDescription: Subnet group
       SubnetIds:
-        - !Ref 'DBSubnetId'
+        - !Ref 'DBSubnetId1'
+        - !Ref 'DBSubnetId2'
   RDS:
     Type: AWS::RDS::DBInstance
     DeletionPolicy: Delete
     Properties:
       AllocatedStorage: '20'
       DBInstanceClass: db.t3.micro
-      DBSubnetGroupName: !Ref 'RDSSubnetGroup'
-      DBName: !Ref 'DBName'
+      DBName: dbname
       Engine: MySQL
-      EngineVersion: !Ref 'DBVersion'
+      EngineVersion: 8.0.32
       MasterUserPassword: !Sub '{{resolve:secretsmanager:${RDSSecret}::password}}'
       MasterUsername: !Sub '{{resolve:secretsmanager:${RDSSecret}::username}}'
       StorageType: gp2
+      DBSubnetGroupName: !Ref 'RDSSubnetGroup'
       VPCSecurityGroups:
         - !Ref 'RDSSecurityGroup'
       Tags:
@@ -181,7 +179,6 @@ Resources:
         - !Ref 'WordpressRole'
   WordPressIP:
     Type: AWS::EC2::EIP
-    DependsOn: InternetGatewayAttachment
     Properties:
       InstanceId: !Ref 'EC2Instance'
   EC2Instance:
@@ -189,11 +186,11 @@ Resources:
     Properties:
       IamInstanceProfile: !Ref 'WordpressInstanceProfile'
       InstanceType: !Ref 'InstanceType'
-      KeyName: !Ref 'WordpressKeyPair'
+      KeyName: !Ref 'KeyPair'
       SubnetId: !Ref 'AppSubnetId'
       SecurityGroupIds:
         - !Ref 'EC2SecurityGroup'
-      ImageId: !Ref 'AMI'
+      ImageId: !Ref 'LatestAmiId'
       Monitoring: false
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
