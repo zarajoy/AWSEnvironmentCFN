@@ -1,0 +1,222 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EC2 Running Wordpress on Nginx, RDS db, ALB and Certs
+Parameters:
+  Project:
+    Description: Give the project a name
+    Type: String
+    Default: ZaraJoy-wordpress
+  VpcID:
+    Description: VPC Id
+    Type: AWS::EC2::VPC::Id
+    Default: null
+  Environment:
+    Description: What type of Environment is this?
+    Type: String
+    AllowedValues:
+      - Dev
+      - Test
+      - Production
+      - QA
+    Default: Dev
+  AppSubnetId:
+    Type: AWS::EC2::Subnet::Id
+  DBSubnetId:
+    Type: AWS::EC2::Subnet::Id
+  EfsMountPoint:
+    Type: String
+    Default: /path/to/mount1
+  EfsFileSystemId:
+    Type: String
+    Default: fs-00000000
+  InstanceType:
+    Type: String
+    Default: t3.small
+  LatestAmiId:
+    Description: AMI for EC2
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+  DbHost:
+    Type: String
+  DbName:
+    Type: String
+  DbUser:
+    Type: String
+    Default: DbUser
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Tags
+        Parameters:
+          - Project
+          - Environment
+Resources:
+  KeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: WordPressKeyPair
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow Traffic from Web
+      VpcId: !Ref 'VpcID'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: '0.0.0.0/0'
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: '0.0.0.0/0'
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow Traffic to Instance from ALB
+      VpcId: !Ref 'VpcID'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: '0.0.0.0/0'
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: '0.0.0.0/0'
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref 'ALBSecurityGroup'
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref 'ALBSecurityGroup'
+        - Description: Allow SSH IPv4 IN
+          IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: '0.0.0.0/0'
+  EC2SecurityGroupSelfReferenceRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'EC2SecurityGroup'
+      IpProtocol: tcp
+      FromPort: '0'
+      ToPort: '65535'
+      SourceSecurityGroupId: !Ref 'EC2SecurityGroup'
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow traffic on 3306 from EC2
+      VpcId: !Ref 'VpcID'
+      SecurityGroupIngress:
+        - Description: Allow MySQL IPv4 IN
+          IpProtocol: tcp
+          FromPort: '3306'
+          ToPort: '3306'
+          SourceSecurityGroupId: !Ref 'EC2SecurityGroup'
+  RDSSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: RDSSecret
+      Description: This secret has a dynamically generated secret password.
+      GenerateSecretString:
+        SecretStringTemplate: !Sub '{"username": "${DbUser}"}'
+        GenerateStringKey: password
+        PasswordLength: 30
+        ExcludeCharacters: '"@/\'
+      Tags:
+        - Key: AppName
+          Value: AppA
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group
+      SubnetIds:
+        - !Ref 'DBSubnetId'
+  RDS:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      AllocatedStorage: '20'
+      DBInstanceClass: db.t3.micro
+      DBSubnetGroupName: !Ref 'RDSSubnetGroup'
+      DBName: !Ref 'DBName'
+      Engine: MySQL
+      EngineVersion: !Ref 'DBVersion'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${RDSSecret}::password}}'
+      MasterUsername: !Sub '{{resolve:secretsmanager:${RDSSecret}::username}}'
+      StorageType: gp2
+      VPCSecurityGroups:
+        - !Ref 'RDSSecurityGroup'
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref 'Project'
+              - RDS
+        - Key: Environment
+          Value: !Ref 'Environment'
+  WordpressRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - arn:aws:iam::aws:policy/AmazonSSMFullAccess
+  WordpressInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref 'WordpressRole'
+  WordPressIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      InstanceId: !Ref 'EC2Instance'
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      IamInstanceProfile: !Ref 'WordpressInstanceProfile'
+      InstanceType: !Ref 'InstanceType'
+      KeyName: !Ref 'WordpressKeyPair'
+      SubnetId: !Ref 'AppSubnetId'
+      SecurityGroupIds:
+        - !Ref 'EC2SecurityGroup'
+      ImageId: !Ref 'AMI'
+      Monitoring: false
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp2
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref 'Project'
+              - EC2
+        - Key: Environment
+          Value: !Ref 'Environment'
+      UserData: !Base64
+        Fn::Sub: "#!/bin/bash -xe\nyum update -y\nyum install -y aws-cfn-bootstrap\
+          \ cloud-init aws-cli\n/opt/aws/bin/cfn-init -v --stack ${AWS::StackName}\
+          \ --resource EC2Instance --region ${AWS::Region} --configsets ec2_setup\n\
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2Instance\
+          \ --region ${AWS::Region}\n"
+Outputs:
+  InstanceURL:
+    Value: !Join
+      - ''
+      - - http://
+        - !GetAtt 'EC2Instance.PrivateDnsName'
