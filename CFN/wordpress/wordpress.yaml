@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: EC2 Running Wordpress on linux, RDS db, ALB and Certs
+Description: EC2 Running Wordpress on linux, RDS db, 
 Parameters:
   Project:
     Description: Give the project a name
