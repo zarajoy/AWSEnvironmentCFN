@@ -1,4 +1,5 @@
-Description: Creates a simple apache webserver. Copies index.html from s3 bucket to load as webpage.
+Description: Creates a simple apache webserver. Copies index.html from s3 bucket
+  to load as webpage.
 Parameters:
   Project:
     Description: Give the project a name
@@ -21,11 +22,18 @@ Parameters:
     Description: BucketName
     Type: String
     Default: zarajoy-s3-4fd4f850
-  ObjectPrefix:
+  ObjectPrefix1:
     Description: location of index.html in bucket. if at root just /
     Type: String
-    Default: /
-  SubnetId:
+    Default: /web1/
+  ObjectPrefix2:
+    Description: location of index.html in bucket. if at root just /
+    Type: String
+    Default: /web2/
+  SubnetId1:
+    Description: Subnet ID which will run the web server instance
+    Type: AWS::EC2::Subnet::Id
+  SubnetId2:
     Description: Subnet ID which will run the web server instance
     Type: AWS::EC2::Subnet::Id
   LatestAmiId:
@@ -37,7 +45,7 @@ Parameters:
     Type: String
     MinLength: '9'
     MaxLength: '18'
-    Default: '0.0.0.0/0'
+    Default: 180.150.38.5/32
     AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
     ConstraintDescription: Must be a valid IP CIDR range of the form x.x.x.x/x
 Metadata:
@@ -53,47 +61,93 @@ Resources:
     Type: AWS::EC2::KeyPair
     Properties:
       KeyName: KeyPair
-  WebServerSecurityGroup:
+
+  ALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Enable HTTP access via port 80 and SSH Access port 22.
-      VpcId: vpc-082497b4f260197b3
+      GroupDescription: Web access to ALB
+      VpcId: vpc-032a7dbab5e6d1fc4 #remove hardcode
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: '80'
           ToPort: '80'
-          CidrIp: '0.0.0.0/0'
+          CidrIp: 0.0.0.0/0
+
+  WebServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP access via port 80 and SSH Access port 22.
+      VpcId: vpc-032a7dbab5e6d1fc4 #remove hardcode
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
           FromPort: '22'
           ToPort: '22'
-          CidrIp: !Ref 'SSHLocation'
-  EC2:
+          CidrIp: !Ref SSHLocation
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+  web1:
     Type: AWS::EC2::Instance
     Properties:
-      InstanceType: !Ref 'InstanceType'
-      ImageId: !Ref 'LatestAmiId'
-      SubnetId: !Ref 'SubnetId'
-      KeyName: !Ref 'KeyPair'
-      SecurityGroupIds: 
-        - !Ref 'WebServerSecurityGroup'
-      IamInstanceProfile: !Ref 'IAMInstanceProfile'
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAmiId
+      SubnetId: !Ref SubnetId1
+      KeyName: !Ref KeyPair
+      SecurityGroupIds:
+        - !Ref WebServerSecurityGroup
+      IamInstanceProfile: !Ref IAMInstanceProfile
       UserData: !Base64
-        Fn::Sub: "#!/bin/bash -xe\nyum update -y aws-cfn-bootstrap\nyum install -y\
-          \ httpd\nsystemctl start httpd\nsystemctl enable httpd\naws s3 cp s3://${BucketName}${ObjectPrefix}index.html\
-          \ /var/www/html/\n"
+        Fn::Sub: |
+          #!/bin/bash -xe
+          yum update -y aws-cfn-bootstrap
+          yum install -y httpd
+          systemctl start httpd
+          systemctl enable httpd
+          aws s3 cp s3://${BucketName}${ObjectPrefix1}index.html /var/www/html/
       Tags:
         - Key: Name
           Value: !Join
             - '-'
-            - - !Ref 'Project'
-              - EC2
+            - - !Ref Project
+              - EC21
         - Key: Environment
-          Value: !Ref 'Environment'
+          Value: !Ref Environment
+  web2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAmiId
+      SubnetId: !Ref SubnetId2
+      KeyName: !Ref KeyPair
+      SecurityGroupIds:
+        - !Ref WebServerSecurityGroup
+      IamInstanceProfile: !Ref IAMInstanceProfile
+      UserData: !Base64
+        Fn::Sub: |
+          #!/bin/bash -xe
+          yum update -y aws-cfn-bootstrap
+          yum install -y httpd
+          systemctl start httpd
+          systemctl enable httpd
+          aws s3 cp s3://${BucketName}${ObjectPrefix2}index.html /var/www/html/
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref Project
+              - EC22
+        - Key: Environment
+          Value: !Ref Environment
   IAMInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
       Roles:
-        - !Ref 'IAMRole'
+        - !Ref IAMRole
       InstanceProfileName: ec2-access-s3
   IAMRole:
     Type: AWS::IAM::Role
@@ -115,11 +169,73 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:GetObject
-                Resource: !Sub 'arn:aws:s3:::${BucketName}/index.html'
+                Resource: !Sub arn:aws:s3:::${BucketName}/web1/index.html
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub arn:aws:s3:::${BucketName}/web2/index.html
+
+  loadbalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Subnets:
+        - !Ref SubnetId1
+        - !Ref SubnetId2
+
+  HTTPlistener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+      LoadBalancerArn: !Ref loadbalancer
+      Port: 80
+      Protocol: HTTP
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      VpcId: vpc-032a7dbab5e6d1fc4
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: false
+        - Key: deregistration_delay.timeout_seconds
+          Value: '20'
+      TargetType: instance
+      Targets:
+        - Id: !Ref web1
+          Port: 80
+        - Id: !Ref web2
+          Port: 80
+
 Outputs:
-  WebsiteURL:
+  Website1URL:
     Description: URL for webserver created.
     Value: !Join
       - ''
       - - http://
-        - !GetAtt 'EC2.PublicDnsName'
+        - !GetAtt web1.PublicDnsName
+  Website2URL:
+    Description: URL for webserver created.
+    Value: !Join
+      - ''
+      - - http://
+        - !GetAtt web2.PublicDnsName
+  ALBURL:
+    Description: URL for webserver created.
+    Value: !Join
+      - ''
+      - - http://
+        - !GetAtt loadbalancer.DNSName
