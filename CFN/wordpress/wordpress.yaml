@@ -1,13 +1,10 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: EC2 Running Wordpress on linux, RDS db, 
+Description: EC2 Running Wordpress on linux, RDS db, network included
 Parameters:
   Project:
     Description: Give the project a name
     Type: String
     Default: ZaraJoy-wordpress
-  VpcID:
-    Description: VPC Id
-    Type: AWS::EC2::VPC::Id
   Environment:
     Description: What type of Environment is this?
     Type: String
@@ -17,12 +14,10 @@ Parameters:
       - Production
       - QA
     Default: Dev
-  AppSubnetId:
-    Type: AWS::EC2::Subnet::Id
-  DBSubnetId1:
-    Type: AWS::EC2::Subnet::Id
-  DBSubnetId2:
-    Type: AWS::EC2::Subnet::Id
+  VPCCIDR:
+    Description: VPC CIDR Range
+    Type: String
+    Default: 10.0.0.0/16
   EfsMountPoint:
     Type: String
     Default: /path/to/mount1
@@ -36,19 +31,29 @@ Parameters:
     Description: AMI for EC2
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
-  DbUser:
-    Type: String
-    Default: DbUser
-  DbPassword:
-    Type: String
-    NoEcho: 'true'
-    MinLength: '8'
-    AllowedPattern: '[a-zA-Z0-9!?]*'
-    ConstraintDescription: Must only contain upper and lowercase letters, numbers
-      and contain a minimum of 8 characters
   DBNAME:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+    Default: wordpress
+    MaxLength: '64'
+    MinLength: '1'
     Type: String
-    Default: WPDB
+  DBPassword:
+    ConstraintDescription: must contain only alphanumeric characters.
+    Description: The WordPress database admin account password
+    MaxLength: '41'
+    MinLength: '8'
+    NoEcho: 'true'
+    Type: String
+  DBUser:
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+    Description: The WordPress database admin account username
+    MaxLength: '16'
+    MinLength: '1'
+    Type: String
+  myip:
+    Type: String
+    Default: 180.150.38.5/32
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -58,77 +63,185 @@ Metadata:
           - Project
           - Environment
 Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref Project
+              - VPC
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref Project
+              - IGW
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+  RouteTablePublic:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref Project
+              - RouteTablePublic
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+  RouteTablePublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTablePublic
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  RouteTableAssociationPublicA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetPublicA
+      RouteTableId: !Ref RouteTablePublic
+  SubnetPublicA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ''
+      MapPublicIpOnLaunch: true
+      CidrBlock: !Select
+        - 6
+        - !Cidr
+          - !GetAtt VPC.CidrBlock
+          - 16
+          - 12
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref Project
+              - subnet-public-A
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+  SubnetDatabaseA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ''
+      CidrBlock: !Select
+        - 0
+        - !Cidr
+          - !GetAtt VPC.CidrBlock
+          - 16
+          - 12
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref Project
+              - subnet-database-A
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+  SubnetDatabaseB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs ''
+      CidrBlock: !Select
+        - 1
+        - !Cidr
+          - !GetAtt VPC.CidrBlock
+          - 16
+          - 12
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref Project
+              - subnet-database-B
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
   KeyPair:
     Type: AWS::EC2::KeyPair
     Properties:
       KeyName: WordPressKeyPair
-  ALBSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Allow Traffic from Web
-      VpcId: !Ref 'VpcID'
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: '0.0.0.0/0'
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: '0.0.0.0/0'
   EC2SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow Traffic to Instance from ALB
-      VpcId: !Ref 'VpcID'
+      GroupDescription: Allow Traffic to Instance from your ip
+      VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          CidrIp: '0.0.0.0/0'
+          CidrIp: !Ref myip
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
-          CidrIp: '0.0.0.0/0'
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          SourceSecurityGroupId: !Ref 'ALBSecurityGroup'
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          SourceSecurityGroupId: !Ref 'ALBSecurityGroup'
+          CidrIp: !Ref myip
         - Description: Allow SSH IPv4 IN
           IpProtocol: tcp
           FromPort: '22'
           ToPort: '22'
-          CidrIp: '0.0.0.0/0'
+          CidrIp: !Ref myip
   EC2SecurityGroupSelfReferenceRule:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
-      GroupId: !Ref 'EC2SecurityGroup'
+      GroupId: !Ref EC2SecurityGroup
       IpProtocol: tcp
       FromPort: '0'
       ToPort: '65535'
-      SourceSecurityGroupId: !Ref 'EC2SecurityGroup'
+      SourceSecurityGroupId: !Ref EC2SecurityGroup
   RDSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Allow traffic on 3306 from EC2
-      VpcId: !Ref 'VpcID'
+      VpcId: !Ref VPC
       SecurityGroupIngress:
         - Description: Allow MySQL IPv4 IN
           IpProtocol: tcp
           FromPort: '3306'
           ToPort: '3306'
-          SourceSecurityGroupId: !Ref 'EC2SecurityGroup'
+          SourceSecurityGroupId: !Ref EC2SecurityGroup
   RDSSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
       DBSubnetGroupDescription: Subnet group
       SubnetIds:
-        - !Ref 'DBSubnetId1'
-        - !Ref 'DBSubnetId2'
+        - !Ref SubnetDatabaseA
+        - !Ref SubnetDatabaseB
   RDS:
     Type: AWS::RDS::DBInstance
     DeletionPolicy: Delete
@@ -138,20 +251,20 @@ Resources:
       DBName: !Ref DBNAME
       Engine: MySQL
       EngineVersion: 8.0.32
-      MasterUserPassword: !Ref DbPassword
-      MasterUsername: !Ref DbUser
+      MasterUserPassword: !Ref DBPassword
+      MasterUsername: !Ref DBUser
       StorageType: gp2
-      DBSubnetGroupName: !Ref 'RDSSubnetGroup'
+      DBSubnetGroupName: !Ref RDSSubnetGroup
       VPCSecurityGroups:
-        - !Ref 'RDSSecurityGroup'
+        - !Ref RDSSecurityGroup
       Tags:
         - Key: Name
           Value: !Join
             - '-'
-            - - !Ref 'Project'
+            - - !Ref Project
               - RDS
         - Key: Environment
-          Value: !Ref 'Environment'
+          Value: !Ref Environment
 
   WordpressRole:
     Type: AWS::IAM::Role
@@ -174,21 +287,21 @@ Resources:
     Properties:
       Path: /
       Roles:
-        - !Ref 'WordpressRole'
+        - !Ref WordpressRole
   WordPressIP:
     Type: AWS::EC2::EIP
     Properties:
-      InstanceId: !Ref 'EC2Instance'
+      InstanceId: !Ref EC2Instance
   EC2Instance:
     Type: AWS::EC2::Instance
     Properties:
-      IamInstanceProfile: !Ref 'WordpressInstanceProfile'
-      InstanceType: !Ref 'InstanceType'
-      KeyName: !Ref 'KeyPair'
-      SubnetId: !Ref 'AppSubnetId'
+      IamInstanceProfile: !Ref WordpressInstanceProfile
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPair
+      SubnetId: !Ref SubnetPublicA
       SecurityGroupIds:
-        - !Ref 'EC2SecurityGroup'
-      ImageId: !Ref 'LatestAmiId'
+        - !Ref EC2SecurityGroup
+      ImageId: !Ref LatestAmiId
       Monitoring: false
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
@@ -199,14 +312,13 @@ Resources:
         - Key: Name
           Value: !Join
             - '-'
-            - - !Ref 'Project'
+            - - !Ref Project
               - EC2
         - Key: Environment
-          Value: !Ref 'Environment'
-      UserData:
-        Fn::Base64: !Sub |
+          Value: !Ref Environment
+      UserData: !Base64
+        Fn::Sub: |
           #!/bin/bash -xe
-
           # Install system software - including Web and DB (because we need the CLI tools)
           dnf install wget php-mysqlnd httpd php-fpm php-mysqli mariadb105-server php-json php php-devel -y
           # Start httpd and set to start on system startup
@@ -222,11 +334,11 @@ Resources:
           # Configure Wordpress
           cp ./wp-config-sample.php ./wp-config.php
           sed -i "s/'database_name_here'/'${DBNAME}'/g" wp-config.php
-          sed -i "s/'username_here'/'${DbUser}'/g" wp-config.php
-          sed -i "s/'password_here'/'${DbPassword}'/g" wp-config.php
+          sed -i "s/'username_here'/'${DBUser}'/g" wp-config.php
+          sed -i "s/'password_here'/'${DBPassword}'/g" wp-config.php
           sed -i "s/'localhost'/'${RDS.Endpoint.Address}'/g" wp-config.php
-          #permissions   
-          usermod -a -G apache ec2-user   
+          #permissions
+          usermod -a -G apache ec2-user
           chown -R ec2-user:apache /var/www
           chmod 2775 /var/www
           find /var/www -type d -exec chmod 2775 {} \;
@@ -251,14 +363,13 @@ Resources:
           $SQL_COMMAND "UPDATE wp_posts SET post_content = replace(post_content, '$OLD_URL', 'http://$HOST');"
           $SQL_COMMAND "UPDATE wp_postmeta SET meta_value = replace(meta_value,'$OLD_URL','http://$HOST');"
           EOF
-
           chmod 755 /home/ec2-user/update_wp_ip.sh
           echo "/home/ec2-user/update_wp_ip.sh" >> /etc/rc.local
           /home/ec2-user/update_wp_ip.sh
   CWAgentConfig:
     Type: AWS::SSM::Parameter
     Properties:
-      Type: 'String'
+      Type: String
       Value: |
         {
           "agent": {
@@ -361,13 +472,13 @@ Resources:
               }
             }
           }
-        }          
+        }
 Outputs:
   WordPressIP:
     Value: !Join
       - ''
       - - http://
-        - !GetAtt 'EC2Instance.PublicIp'
+        - !GetAtt EC2Instance.PublicIp
   dbhost:
-    Description: "RDS Endpoint Address"
+    Description: RDS Endpoint Address
     Value: !GetAtt RDS.Endpoint.Address
