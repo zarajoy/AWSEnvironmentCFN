@@ -1,5 +1,4 @@
-Description: Creates a simple apache webserver. Copies index.html from s3 bucket
-  to load as webpage.
+Description: Creates a load balanced cluster of simple apache webservers. PreReqs = s3 bucket with index.html loaded. see CFN/loadbalancedWebserver/README.md for instructions.
 Parameters:
   Project:
     Description: Give the project a name
@@ -14,6 +13,10 @@ Parameters:
       - Production
       - QA
     Default: Dev
+  VPCCIDR:
+    Description: VPC CIDR Range
+    Type: String
+    Default: 10.0.0.0/16
   InstanceType:
     Description: WebServer EC2 instance type.
     Type: String
@@ -30,12 +33,6 @@ Parameters:
     Description: location of index.html in bucket. if at root just /
     Type: String
     Default: /web2/
-  SubnetId1:
-    Description: Subnet ID which will run the web server instance
-    Type: AWS::EC2::Subnet::Id
-  SubnetId2:
-    Description: Subnet ID which will run the web server instance
-    Type: AWS::EC2::Subnet::Id
   LatestAmiId:
     Description: AMI for EC2
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
@@ -56,7 +53,231 @@ Metadata:
         Parameters:
           - Project
           - Environment
+
 Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref Project
+              - VPC
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref Project
+              - IGW
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  RouteTablePublic:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref Project
+              - RouteTablePublic
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+
+  RouteTablePublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTablePublic
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  RouteTableAssociationPublicA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetPublicA
+      RouteTableId: !Ref RouteTablePublic
+
+  RouteTableAssociationPublicB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetPublicB
+      RouteTableId: !Ref RouteTablePublic
+
+  RouteTablePrivate:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref Project
+              - RouteTablePrivate
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+
+  SubnetApplicationA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ''
+      CidrBlock: !Select
+        - 3
+        - !Cidr
+          - !GetAtt VPC.CidrBlock
+          - 16
+          - 12
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref Project
+              - subnet-application-A
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+
+  SubnetApplicationB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs ''
+      CidrBlock: !Select
+        - 4
+        - !Cidr
+          - !GetAtt VPC.CidrBlock
+          - 16
+          - 12
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref Project
+              - subnet-application-B
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+
+  SubnetPublicA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ''
+      MapPublicIpOnLaunch: true
+      CidrBlock: !Select
+        - 6
+        - !Cidr
+          - !GetAtt VPC.CidrBlock
+          - 16
+          - 12
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref Project
+              - subnet-public-A
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+
+  SubnetPublicB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs ''
+      MapPublicIpOnLaunch: true
+      CidrBlock: !Select
+        - 7
+        - !Cidr
+          - !GetAtt VPC.CidrBlock
+          - 16
+          - 12
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref Project
+              - subnet-public-B
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: CreatedBy
+          Value: CFN
+
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NATGatewayEIP.AllocationId
+      SubnetId: !Ref SubnetPublicA
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref Project
+              - NATGW
+        - Key: Environment
+          Value: !Ref Environment
+
+  NATGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  RouteTablePrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTablePrivate
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway
+
+  RouteTableAssociationAppA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetApplicationA
+      RouteTableId: !Ref RouteTablePrivate
+
+  RouteTableAssociationAppB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      SubnetId: !Ref SubnetApplicationB
+      RouteTableId: !Ref RouteTablePrivate
+
   KeyPair:
     Type: AWS::EC2::KeyPair
     Properties:
@@ -66,7 +287,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Web access to ALB
-      VpcId: vpc-032a7dbab5e6d1fc4 #remove hardcode
+      VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: '80'
@@ -77,12 +298,8 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Enable HTTP access via port 80 and SSH Access port 22.
-      VpcId: vpc-032a7dbab5e6d1fc4 #remove hardcode
+      VpcId: !Ref VPC
       SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: '80'
-          ToPort: '80'
-          CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
           FromPort: '22'
           ToPort: '22'
@@ -96,7 +313,7 @@ Resources:
     Properties:
       InstanceType: !Ref InstanceType
       ImageId: !Ref LatestAmiId
-      SubnetId: !Ref SubnetId1
+      SubnetId: !Ref SubnetApplicationA
       KeyName: !Ref KeyPair
       SecurityGroupIds:
         - !Ref WebServerSecurityGroup
@@ -122,7 +339,7 @@ Resources:
     Properties:
       InstanceType: !Ref InstanceType
       ImageId: !Ref LatestAmiId
-      SubnetId: !Ref SubnetId2
+      SubnetId: !Ref SubnetApplicationB
       KeyName: !Ref KeyPair
       SecurityGroupIds:
         - !Ref WebServerSecurityGroup
@@ -143,12 +360,14 @@ Resources:
               - EC22
         - Key: Environment
           Value: !Ref Environment
+
   IAMInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
       Roles:
         - !Ref IAMRole
       InstanceProfileName: ec2-access-s3
+
   IAMRole:
     Type: AWS::IAM::Role
     Properties:
@@ -183,8 +402,8 @@ Resources:
       SecurityGroups:
         - !Ref ALBSecurityGroup
       Subnets:
-        - !Ref SubnetId1
-        - !Ref SubnetId2
+        - !Ref SubnetPublicB
+        - !Ref SubnetPublicA
 
   HTTPlistener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -201,7 +420,7 @@ Resources:
     Properties:
       Port: 80
       Protocol: HTTP
-      VpcId: vpc-032a7dbab5e6d1fc4
+      VpcId: !Ref VPC
       HealthCheckIntervalSeconds: 30
       HealthCheckPath: /
       HealthCheckProtocol: HTTP
@@ -221,18 +440,6 @@ Resources:
           Port: 80
 
 Outputs:
-  Website1URL:
-    Description: URL for webserver created.
-    Value: !Join
-      - ''
-      - - http://
-        - !GetAtt web1.PublicDnsName
-  Website2URL:
-    Description: URL for webserver created.
-    Value: !Join
-      - ''
-      - - http://
-        - !GetAtt web2.PublicDnsName
   ALBURL:
     Description: URL for webserver created.
     Value: !Join
